@@ -146,6 +146,16 @@ ggsave(
 library(magrittr)
 scRNA@meta.data %<>% dplyr::mutate(
     celltype = dplyr::case_when(
-        
+        Harmony_SNN_res.0.4 %in% c(1,7,11) ~ 'SMC',
+        Harmony_SNN_res.0.4 %in% c(19,22) ~ 'Oocyte|granule cells',
+        Harmony_SNN_res.0.4 %in% c(13,4) ~ 'NK & T cells',
+        Harmony_SNN_res.0.4 %in% c(3) ~ 'Endothelial cells',
+        Harmony_SNN_res.0.4 %in% c(17) ~ 'Adipocytes',
+        Harmony_SNN_res.0.4 %in% c(6,16,26) ~ 'Myeloid cells',
+        Harmony_SNN_res.0.4 %in% c(9,23,24,25) ~ 'Epithelial cells',
+        Harmony_SNN_res.0.4 %in% c(20) ~ 'B cells',
+        TRUE ~ 'Stromal & theca cells'
     )
 )
+# 保存文件
+qsave(scRNA,file = "04_大群数据_scp.qs")
