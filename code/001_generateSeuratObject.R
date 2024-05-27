@@ -314,10 +314,10 @@ ggsave(
 scRNA <- scRNA[,scRNA$DF.classify=="Singlet"] 
 # harmony重新聚类
 scRNA <- SCP::Integration_SCP(scRNA.filter, batch = 'sample', integration_method = 'Harmony',cluster_resolution = seq(0.1,1.5,0.1))
-qsave(scRNA, file = './04_大群数据_scp.qs')
+qsave(scRNA, file = './05_大群数据_scp.qs')
 # BBKNN聚类
-scRNA <- SCP::Integration_SCP(scRNA, batch = 'sample', integration_method = 'BBKNN',cluster_resolution = seq(0.1,1.5,0.1))
-qsave(scRNA, file = './04_大群数据_scp.qs')
+scRNA <- SCP::Integration_SCP(scRNA.filter, batch = 'sample', integration_method = 'BBKNN',cluster_resolution = seq(0.1,1.5,0.1))
+qsave(scRNA, file = './05_大群数据_scp.qs')
 # scVI聚类
-scRNA <- SCP::Integration_SCP(scRNA, batch = 'sample', integration_method = 'scVI',cluster_resolution = seq(0.1,1.5,0.1))
+scRNA <- SCP::Integration_SCP(scRNA.filter, batch = 'sample', integration_method = 'scVI',cluster_resolution = seq(0.1,1.5,0.1))
 qsave(scRNA, file = './04_大群数据_scp.qs')
