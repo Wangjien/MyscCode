@@ -242,3 +242,6 @@ qsave(scRNA, file = "./06_髓系数据MacroMono_scp.qs")
 # ComBat聚类
 scRNA <- SCP::Integration_SCP(scRNA, batch = "sample", integration_method = "ComBat", cluster_resolution = seq(0.1, 1.5, 0.1))
 qsave(scRNA, file = "./06_髓系数据MacroMNO_scp.qs")
+
+# 8 Macrophage和Monocytes进行分群**************************************************************************************************************
+
