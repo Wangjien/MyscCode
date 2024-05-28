@@ -244,4 +244,54 @@ scRNA <- SCP::Integration_SCP(scRNA, batch = "sample", integration_method = "Com
 qsave(scRNA, file = "./06_髓系数据MacroMNO_scp.qs")
 
 # 8 Macrophage和Monocytes进行分群**************************************************************************************************************
+myeloids = list(
+    Mac=c("C1QA","C1QB","C1QC","SELENOP","RNASE1","DAB2","LGMN","PLTP","MAF","SLCO2B1"),
+    Mono=c("VCAN","FCN1","CD300E","S100A12","EREG","APOBEC3A","STXBP2","ASGR1","CCR2","NRG1"),
+    Neutrophils =  c("FCGR3B","CXCR2","SLC25A37","G0S2","CXCR1","ADGRG3","PROK2","STEAP4","CMTM2" ),
+    Basophils = c('CLC','GATA2','FCER1A'),
+    pDC = c("GZMB","SCT","CLIC3","LRRC26","LILRA4","PACSIN1","CLEC4C","MAP1A","PTCRA","C12orf75"),
+    DC1 = c("CLEC9A","XCR1","CLNK","CADM1","ENPP1","SNX22","NCALD","DBN1","HLA-DOB","PPY"),
+    DC2=c( "CD1C","CD1E","AL138899.1","CD2","GPAT3","CCND2","ENHO","PKIB","CD1B"),
+    DC3 =  c("HMSD","ANKRD33B","LAD1","CCR7","LAMP3","CCL19","CCL22","INSM1","TNNT2","TUBB2B"),
+    Mast = c('CPA3','TPSAB1','TPSB2')
+)
+library(RColorBrewer)
 
+p1 <- DotPlot(object = scRNA, features = myeloids ,scale = T,group.by = "BBKNN_res.1.5") + ##celltype_l3. ###seurat_clusters
+  scale_colour_gradientn(colors=brewer.pal(9, "YlGnBu"))+
+  annotate(geom = "segment", y = Inf, yend = Inf, color = "black", x = -Inf, xend = Inf, linewidth = 1) +
+  annotate(geom = "segment", x = Inf, xend = Inf, color = "black", y = -Inf, yend = Inf, linewidth = 1) +
+  theme(
+    axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 14),
+    strip.text.x = element_text(size = 14, angle = 0), axis.text.y = element_text(size = 15)
+        ) +
+  theme(panel.border = element_rect(fill = NA, color = "black", linewidth = 0.7, linetype = "solid")) +
+    labs(x = "Gene Marker", y = "Cluster") +
+  theme(
+      legend.position = "bottom",
+      panel.spacing.x = unit(0.1, "cm"),
+      panel.spacing.y = unit(0.1, "cm"),
+      # strip.text = element_blank(),
+      # strip.text.x.top = element_blank(),
+      panel.grid = element_line(color = "grey", linetype = "dashed", linewidth = unit(0.1, "cm")))
+p2 <- DimPlot(scRNA,reduction = 'BBKNNUMAP2D',group.by = 'BBKNN_res.1.5',label = T, repel = T, label.size = 6,
+    cols = c(RColorBrewer::brewer.pal(n=12,name = "Paired"),RColorBrewer::brewer.pal(n=8,'Pastel2'),RColorBrewer::brewer.pal(n=6,'Set2'))) + 
+  labs(title = 'resolution:1.5', x= 'umap1',y = 'umap2')
+ggsave(filename = "./002_MacrophageMonocytes大群分群.png", height = 7,width = 24 , plot = p2+p1+patchwork::plot_layout(widths = c(1,4)), bg = "white")
+
+## Top10差异基因绘制热图 
+library(viridis)
+DefaultAssay(scRNA) = "RNA"
+Seurat::Idents(scRNA) = "BBKNN_res.1.5"
+scRNA <- Seurat::ScaleData(scRNA)
+scRNA.Findmarkers <- FindAllMarkers(
+  scRNA, 
+  only.pos = TRUE, 
+  # min.pct = 0.25, 
+  # logfc.threshold = 0.25, 
+  BPPARAM = MulticoreParam(20))
+Top10.genes <- scRNA.Findmarkers %>%
+  group_by(cluster) %>%
+  top_n(n = 10, wt = avg_log2FC)
+p3 <- DoHeatmap(scRNA,features=Top10.genes$gene)+scale_fill_viridis()
+write.csv(Top10.genes, file ="MacroMono分辨率1.5Top10基因.csv", quote = F, row.names = T)

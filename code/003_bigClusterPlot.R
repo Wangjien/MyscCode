@@ -71,8 +71,8 @@ p2 <- DimPlot(scRNA, group.by = "sample",label = F,repel = T,cols = c(RColorBrew
   theme_test(base_rect_size = 1.1) + Seurat::NoAxes() + Seurat::NoGrid() + labs(title ="Patient") +
   theme(plot.title = element_text(hjust = 0.5,size = 18,color="black"), legend.text = element_text(size = 10, color = "black"),
   legend.position = "right")
-ggsave(filename = "./001_AllClutserCelltypeDimPlot05.png", height = 4,width = 5, plot = p2, bg = "white")
-ggsave(filename = "./001_AllClutserCelltypeDimPlot05.pdf", height = 4, width = 5, plot = p2, bg = "white", family = "ArialMT")
+ggsave(filename = "./001_AllClutserCelltypeDimPlot05.png", height = 4,width = 6, plot = p2, bg = "white")
+ggsave(filename = "./001_AllClutserCelltypeDimPlot05.pdf", height = 4, width = 6, plot = p2, bg = "white", family = "ArialMT")
 
 p3 <- DimPlot(scRNA, group.by = "group1",label = F,repel = T,cols = c(RColorBrewer::brewer.pal(n = 12, name = "Paired"), 
   RColorBrewer::brewer.pal(n = 8, name = "Set2"),RColorBrewer::brewer.pal(n = 6, name = "Dark2"))) +
@@ -80,8 +80,8 @@ p3 <- DimPlot(scRNA, group.by = "group1",label = F,repel = T,cols = c(RColorBrew
   theme_test(base_rect_size = 1.1) + Seurat::NoAxes() + Seurat::NoGrid() + labs(title ="Group") +
   theme(plot.title = element_text(hjust = 0.5,size = 18,color="black"), legend.text = element_text(size = 10, color = "black"),
   legend.position = "right")
-ggsave(filename = "./001_AllClutserCelltypeDimPlot06.png", height = 4, width = 6, plot = p3, bg = "white")
-ggsave(filename = "./001_AllClutserCelltypeDimPlot06.pdf", height = 4, width = 6, plot = p3, bg = "white", family = "ArialMT")
+ggsave(filename = "./001_AllClutserCelltypeDimPlot06.png", height = 4, width = 5, plot = p3, bg = "white")
+ggsave(filename = "./001_AllClutserCelltypeDimPlot06.pdf", height = 4, width = 5, plot = p3, bg = "white", family = "ArialMT")
 
 # split dimplot
 p4 <- DimPlot(scRNA,group.by = "celltype", label = F, repel = T, raster = F,split.by = 'group1',ncol = 6,
