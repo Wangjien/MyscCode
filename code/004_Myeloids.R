@@ -111,11 +111,20 @@ ggsave(filename = "./002_髓系细胞大群分群.png", height = 7,width = 24 , 
 library(magrittr)
 scRNA@meta.data %<>% dplyr::mutate(
     celltype2 = dplyr::case_when(
-        BBKNN_res.1.5 %in% c() ~ '',
-        BBKNN_res.1.5 %in% c() ~ '', 
-        BBKNN_res.1.5 %in% c() ~ '',
-        BBKNN_res.1.5 %in% c() ~ '',
-        BBKNN_res.1.5 %in% c() ~ '',
-        BBKNN_res.1.5 %in% c() ~ ''
+        BBKNN_res.1.5 %in% c(15) ~ 'pDC',
+        BBKNN_res.1.5 %in% c(16) ~ 'DC1', 
+        BBKNN_res.1.5 %in% c(7) ~ 'DC2',
+        BBKNN_res.1.5 %in% c(18) ~ 'DC3',
+        BBKNN_res.1.5 %in% c(9) ~ 'Mast',
+        BBKNN_res.1.5 %in% c(0,13) ~ 'Neutrophils',
+        BBKNN_res.1.5 %in% c(5,6,11) ~ 'Monocyte',
+        BBKNN_res.1.5 %in% c(17) ~ "Basophil",
+        BBKNN_res.1.5 %in% c(1,2,3,4,8,10,12,14) ~ 'Macrophage',
     )
 )
+
+p1 <- DimPlot(scRNA,
+  group.by = "celltype2", label = F, repel = T, raster = F,reduction = 'BBKNNUMAP2D',cols = RColorBrewer::brewer.pal(n = 12, name = "Paired")) +
+  guides(color = guide_legend(override.aes = list(size = 6))) +
+  theme(plot.title = element_blank()) + labs(title = "") +
+  theme_blank(xlab = "UMAP1", ylab = "UMAP2")+ggtitle(paste0('nCells:',dim(scRNA)[2]))
