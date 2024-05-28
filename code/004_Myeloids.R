@@ -42,6 +42,17 @@ table(scRNA$singleR)
 # 分布保存数据
 qsave(scRNA[,scRNA$singleR == "Adipocytes"],file = "06_髓系细胞中提取脂肪细胞.qs")
 qsave(scRNA[,scRNA$singleR == "Epithelial cells"],file = "06_髓系细胞中提取上皮细胞.qs")
-qsave(scRNA[,!scRNA$singleR %in%c('Adipocytes','Epithelial cells')],file = "06_髓系细胞.qs")
+qsave(scRNA[,!scRNA$singleR %in%c('Adipocytes','Epithelial cells')],file = "06_髓系数据_scp.qs")
 # 使用singleR进行粗注释，可以发现在提取的髓系亚群中是有其他细胞存在的，可以使用FeaturePlot查看注释的准确性
-# 去除其他细胞后再次进行聚类
+# 3 去除其他细胞后再次进行聚类*************************************************************************************************
+scRNA <- qread('06_髓系数据_scp.qs')
+scRNA <- CreateSeuratObject(scRNA@assays$RNA@counts)
+scRNA$sample <- stringr::str_split_fixed(rownames(scRNA@meta.data), "_[A|T|G|C].*", n = 2)[, 1]
+scRNA <- SCP::Integration_SCP(scRNA, batch = "sample", integration_method = "Harmony", cluster_resolution = seq(0.1, 1.5, 0.1))
+qsave(scRNA, file = "./06_髓系数据_scp.qs")
+# BBKNN聚类
+scRNA <- SCP::Integration_SCP(scRNA, batch = "sample", integration_method = "BBKNN", cluster_resolution = seq(0.1, 1.5, 0.1))
+qsave(scRNA, file = "./06_髓系数据_scp.qs")
+# scVI聚类
+scRNA <- SCP::Integration_SCP(scRNA, batch = "sample", integration_method = "scVI", cluster_resolution = seq(0.1, 1.5, 0.1))
+qsave(scRNA, file = "./06_髓系数据_scp.qs")
