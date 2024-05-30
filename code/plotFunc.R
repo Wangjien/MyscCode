@@ -117,7 +117,8 @@ scRNA@meta.data %<>% dplyr::mutate(
         sample %in% c('old1','old2','old3') ~ '47-49',
         sample %in% c('na1129','NA_728','na-412') ~ '55-60'
         ),
-    group1 = factor(group1,levels = c('18-29','32-35','37-39','39-44','47-49','55-60'))
+    group1 = factor(group1,levels = c('18-29','32-35','37-39','39-44','47-49','55-60')),
+    group2 = dplyr::case_when(scRNA$sample %in% c())
 )
 
 
