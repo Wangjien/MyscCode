@@ -28,6 +28,8 @@ cds <- preprocess_cds(cds, num_dim = 100)#method默认为PCA
 p1 <- plot_pc_variance_explained(cds)#展示PC数，和seurat降维一摸一样
 cds <- reduce_dimension(cds,reduction_method='UMAP',
                         preprocess_method = 'PCA')
+cds <- cluster_cells(cds,resolution=0.0005)
+p2 <- plot_cells(cds,cell_size=0.5,group_label_size=5)
 #将monocle对象与我们的seurat结合。转化为我们的聚类信息。
 cds.embed <- cds@int_colData$reducedDims$UMAP#monocle3中UMAP信息
 int.embed <- Embeddings(scRNA, reduction = "scVIUMAP2D")#seurat中UMAP降维信息
@@ -35,7 +37,7 @@ int.embed <- int.embed[rownames(cds.embed),]#替换
 cds@int_colData$reducedDims$UMAP <- int.embed #替换
 
 #画图看一下，分群就是我们seurat中的了
-# color_cells_by <- "celltype2"
+color_cells_by <- "celltype2"
 # p2 <- plot_cells(cds, color_cells_by=color_cells_by,
 #            cell_size=0.5,group_label_size=4) 
 

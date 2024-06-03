@@ -107,7 +107,7 @@ theme_set <- theme_dr(arrow = grid::arrow(angle = 20, length = unit(0.15, "inche
 
 ## 2 Add information
 library(magrittr)
-scRNA$sample <- stringr::str_split_fixed(rownames(scRNA@meta.data),'_[A|T|G|C].*',n=2)[,1]
+# scRNA$sample <- stringr::str_split_fixed(rownames(scRNA@meta.data),'_[A|T|G|C].*',n=2)[,1]
 scRNA@meta.data %<>% dplyr::mutate(
     group1 = dplyr::case_when(
         sample %in% c('young1','young3','young4',"HRS421451","HRS421452",'na1111','HRS421447') ~'18-29',
@@ -117,8 +117,7 @@ scRNA@meta.data %<>% dplyr::mutate(
         sample %in% c('old1','old2','old3') ~ '47-49',
         sample %in% c('na1129','NA_728','na-412') ~ '55-60'
         ),
-    group1 = factor(group1,levels = c('18-29','32-35','37-39','39-44','47-49','55-60')),
-    group2 = dplyr::case_when(scRNA$sample %in% c())
+    group1 = factor(group1,levels = c('18-29','32-35','37-39','39-44','47-49','55-60'))
 )
 
 

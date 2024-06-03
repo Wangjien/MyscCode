@@ -42,11 +42,12 @@ monocds <- reduceDimension(
 	max_components = 2,
 	method = "DDRTree")
 monocds <- orderCells(monocds)
+qsave(monocds,file = "cd8_01直接根据阈值进行筛选.qs")
 p2 <- plot_cell_trajectory(monocds,color_by = "State")
 p3 <- plot_cell_trajectory(monocds,color_by = "celltype2")
 p4 <- plot_cell_trajectory(monocds,color_by = "Treat_assess")
 p5 <- plot_cell_trajectory(monocds,color_by="Pseudotime")
-ggsave(filename = "01直接根据阈值进行筛选02.png",plot = cowplot::plot_grid(plotlist = list(p1,p2,p3,p4,p5),align = 'hv',nrow = 1,ncol = 5),height = 4,width = 4.5, bg = "white")
+ggsave(filename = "01直接根据阈值进行筛选02.png",plot = cowplot::plot_grid(plotlist = list(p1,p2,p3,p4,p5),align = 'hv',nrow = 1,ncol = 5),height = 4,width = 21, bg = "white")
 # 高变基因筛选方式2 使用高变基因*************************************************************************************
 monocds <- monocds.raw
 express_genes <- Seurat::VariableFeatures(scRNA)
@@ -64,7 +65,7 @@ p2 <- plot_cell_trajectory(monocds,color_by = "State")
 p3 <- plot_cell_trajectory(monocds,color_by = "celltype2")
 p4 <- plot_cell_trajectory(monocds,color_by = "Treat_assess")
 p5 <- plot_cell_trajectory(monocds,color_by="Pseudotime")
-ggsave(filename = "02高变基因筛选进行筛选02.png",plot = cowplot::plot_grid(plotlist = list(p1,p2,p3,p4,p5),align = 'hv',nrow = 1,ncol = 5),height = 4,width = 4.5, bg = "white")
+ggsave(filename = "cd8_02高变基因筛选进行筛选02.png",plot = cowplot::plot_grid(plotlist = list(p1,p2,p3,p4,p5),align = 'hv',nrow = 1,ncol = 5),height = 4,width = 21, bg = "white")
 
 # 高变基因筛选方式3 cluster差异基因***************************************************************************************
 monocds <- monocds.raw
@@ -84,7 +85,7 @@ p2 <- plot_cell_trajectory(monocds,color_by = "State")
 p3 <- plot_cell_trajectory(monocds,color_by = "celltype2")
 p4 <- plot_cell_trajectory(monocds,color_by = "Treat_assess")
 p5 <- plot_cell_trajectory(monocds,color_by="Pseudotime")
-ggsave(filename = "03cluster差异基因进行筛选02.png",plot = cowplot::plot_grid(plotlist = list(p1,p2,p3,p4,p5),align = 'hv',nrow = 1,ncol = 5),height = 4,width = 4.5, bg = "white")
+ggsave(filename = "cd8_03cluster差异基因进行筛选02.png",plot = cowplot::plot_grid(plotlist = list(p1,p2,p3,p4,p5),align = 'hv',nrow = 1,ncol = 5),height = 4,width = 21, bg = "white")
 
 # 高变基因筛选方式4 使用dpFeature进行筛选***********************************************************************************
 # Description:
@@ -129,3 +130,6 @@ p3 <- plot_cell_trajectory(monocds,color_by = "celltype2")
 p4 <- plot_cell_trajectory(monocds,color_by = "Treat_assess")
 p5 <- plot_cell_trajectory(monocds,color_by="Pseudotime")
 ggsave(filename = "04dpFeature差异基因选进行筛选02.png",plot = cowplot::plot_grid(plotlist = list(p1,p2,p3,p4,p5),align = 'hv',nrow = 1,ncol = 5),height = 4,width = 21, bg = "white")
+
+
+
