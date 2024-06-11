@@ -57,7 +57,7 @@ for (name in names(flist1)) {
 #**********************************************************************************************
 # 自测数据
 message(paste0(Sys.time(), "自测数据"))
-inputDir <- "/root/wangje/Project/临床_薛老师_卵巢/Data/rawData"
+inputDir <- "/root/wangje/Project/Data/rawData"
 setwd(inputDir)
 dirs <- list.files("./")
 flist2 <- list()
@@ -311,13 +311,453 @@ ggsave(
   filename = file.path('./',"03_DoubletFinderSeuratOnjectVlnplot.png"), height = 8, width = 26,
   plot = patchwork::wrap_plots(list(p1, p2), nrow = 2), limitsize = FALSE, bg = "white"
 )
-scRNA <- scRNA[,scRNA$DF.classify=="Singlet"] 
+scRNA <- scRNA[,scRNA$DF.classify=="Singlet"]
+library(magrittr)
+scRNA %<>% NormalizeData()
+scRNA %<>% CellCycleScoring(g2m.features = cc.genes$g2m.genes,
+                                  s.features = cc.genes$s.genes,
+                                  g1.features = cc.genes$g1.genes)
+scRNA <- PercentageFeatureSet(scRNA, pattern = '^MT-', col.name = 'percent.mt') 
 # harmony重新聚类
-scRNA <- SCP::Integration_SCP(scRNA.filter, batch = 'sample', integration_method = 'Harmony',cluster_resolution = seq(0.1,1.5,0.1))
+scRNA <- SCP::Integration_SCP(scRNA.filter, batch = 'sample', integration_method = 'Harmony',vars.to.regress=c('percent.mt','nCount_RNA','Phase'),cluster_resolution = seq(0.1,1.5,0.1))
 qsave(scRNA, file = './05_大群数据_scp.qs')
 # BBKNN聚类
-scRNA <- SCP::Integration_SCP(scRNA.filter, batch = 'sample', integration_method = 'BBKNN',cluster_resolution = seq(0.1,1.5,0.1))
+scRNA <- SCP::Integration_SCP(scRNA.filter, batch = 'sample', integration_method = 'BBKNN',vars.to.regress=c('percent.mt','nCount_RNA','Phase'),cluster_resolution = seq(0.1,1.5,0.1))
 qsave(scRNA, file = './05_大群数据_scp.qs')
 # scVI聚类
-scRNA <- SCP::Integration_SCP(scRNA.filter, batch = 'sample', integration_method = 'scVI',cluster_resolution = seq(0.1,1.5,0.1))
+scRNA <- SCP::Integration_SCP(scRNA.filter, batch = 'sample', integration_method = 'scVI',vars.to.regress=c('percent.mt','nCount_RNA','Phase'),cluster_resolution = seq(0.1,1.5,0.1))
 qsave(scRNA, file = './05_大群数据_scp.qs')
+
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+#  使用harmony同时去除两个批次(sample and group)
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+library(magrittr)
+scRNA <- Seurat::CreateSeuratObject(counts = scRNA[["RNA"]]@counts, meta.data = scRNA@meta.data)
+scRNA_harmony %<>% Seurat::NormalizeData()
+scRNA_harmony %<>% CellCycleScoring(
+  g2m.features = cc.genes$g2m.genes,
+  s.features = cc.genes$s.genes,
+  g1.features = cc.genes$g1.genes
+) %<>% FindVariableFeatures() %<>% ScaleData(vars.to.regress = c("Phase", "nCount_RNA", "percent.mt")) %<>% RunPCA(verbose = FALSE)
+system.time({scRNA_harmony <- RunHarmony(scRNA_harmony, group.by.vars = c("sample","group"))})
+plot1 <- DimPlot(scRNA_harmony, reduction = "pca", group.by = "sample", raster = TRUE)
+plot2 <- ElbowPlot(scRNA_harmony, ndims = 50, reduction = "pca")
+plotc <- plot1 + plot2
+ggsave(filename = file.path('./', paste0("大群harmony", "ElbowPlot.png")), height = 4, width = 9, plot = plotc, bg = "white")
+pc.num <- 1:40
+scRNA_harmony <- RunUMAP(scRNA_harmony, reduction = "harmony", dims = pc.num)
+#scRNA_harmony <- RunTSNE(scRNA_harmony, reduction = "harmony", dims = pc.num)
+scRNA_harmony <- FindNeighbors(scRNA_harmony, reduction = "harmony", dims = pc.num)
+scRNA_harmony <- FindClusters(scRNA_harmony, reduction = "harmony", resolution = seq(0.4,1,0.2))
+
+# DimPlot(scRNA_harmony, reduction = "umap", label = TRUE, raster = FALSE)
+#DimPlot(scRNA_harmony, reduction = "tsne", label = TRUE)
+qsave(scRNA_harmony, file.path('./', paste0('001', "_大群Harmony.qs")))
+
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+#  添加信息
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+
+
+
+
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+# singleR粗注释与
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+message(paste0('[',Sys.time(),']','进行singleR注释......'))
+suppressMessages({
+    library(Seurat)
+    library(dplyr)
+    library(patchwork)
+    library(ggplot2)
+    library(SingleR)
+})
+
+filePrefix <- "001AllCells"
+#### singleR ####
+Run_singleR <- function(data, cluster, resolution) {
+    require("SingleR")
+    require("dplyr")
+    stopifnot(file.exists("/root/wangje/singleR.RData"))
+    load("/root/wangje/singleR.RData")
+    ref_list <- list(encode, hema, hpca, immune, monaImmune)
+    labels_list <- list(
+        encode$label.main,
+        hema$label.main,
+        hpca$label.main,
+        immune$label.main,
+        monaImmune$label.main
+    )
+    sce.data <- GetAssayData(data, solt = "data")
+    sce.singleR <- SingleR::SingleR(
+        test = sce.data,
+        ref = ref_list,
+        labels = labels_list,
+        clusters = cluster,
+        BPPARAM = BiocParallel::MulticoreParam(6)
+    )
+    # 提取 celltype 数据
+    celltype <- data.frame(
+        ClusterID = rownames(sce.singleR),
+        singleR = sce.singleR$labels,
+        stringsAsFactors = FALSE
+    )
+    # 将注释信息添加到seurat对象中
+    if (is.null(resolution)) stop("missing resolution files.")
+    tmp <- data@meta.data %>% dplyr::select(resolution)
+    colnames(tmp) <- "ClusterID"
+    tmp1 <- left_join(tmp, celltype, by = "ClusterID")
+    rownames(tmp1) <- rownames(tmp)
+    sce_new <- AddMetaData(data, tmp1)
+    return(sce_new)
+}
+
+scRNA <- Run_singleR(scRNA,cluster = scRNA$RNA_snn_res.1,resolution = "RNA_snn_res.1")
+
+message(paste0('[',Sys.time(),']','开始进行绘图......'))
+### DotPlot ###
+marks <- function(){
+    mark_list <- list(
+    Immune = c("PTPRC"),
+    NK = c("KLRC1", "FCGR3A", "NCAM1", "KLRD1", "GNLY"),
+    "T cells" = c("CD3D", "CD3G", "CD2", "CD8A", "CD8B", "CD4"),
+    Fibroblasts = c("COL1A1", "DCN", "LUM", "PDGFRA"),
+    Myeloids = c("LYZ", "CD68", "TYROBP"),
+    Epithelial = c("CD24", "KRT19", "EPCAM", "KRT18"),
+    Bcells = c("CD79A", "CD19", "MS4A1"),
+    Endothelial = c("CLDN5", "FLT1", "RAMP2", "CDH5"),
+    Adipocytes = c('FABP4','PPARG','PLIN1'),
+    Erythrocytes = c('HBB','HBA1','HBG1','HBD'),
+    "Smooth muscle" = c("GJA4", "PLAC9", "CRYAB", "ACTA2", "PLN", "ADIRF", "MYH11", "CNN1", "MYL9"),
+    Neutrophil = c("FCGR3B", "S100P", "CMTM2"),
+    oocytes = c("TUBB8", "ZP3", "FIGLA"),
+    Granulosal = c("GSTA1", "AMH", "HSD17B1", "DSP"),
+    DC = c("LILRA4", "CXCR3", "IRF7"),
+    Mast = c("CPA3", "TPSAB1", "TPSB2"))
+    return(mark_list)
+}
+# 气泡图
+plotBigDotPlot <- function(inputfile, group.by, marker) {
+    p1 <- DotPlot(inputfile, assay = "RNA", features = marker, scale = TRUE, group.by = group.by) +
+        scale_color_gradient2(low = "blue", mid = "white", high = "red") +
+        # 添加四条黑色边界线
+        annotate(geom = "segment", x = -Inf, xend = Inf, y = Inf, yend = Inf, color = "black", size = 1) +
+        annotate(geom = "segment", x = -Inf, xend = Inf, y = -Inf, yend = -Inf, color = "black", size = 1) +
+        theme_minimal() +
+        theme(
+            axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 14),
+            strip.text.x = element_text(size = 14, angle = 0),
+            axis.text.y = element_text(size = 15),
+            panel.border = element_rect(fill = NA, color = "black", linewidth = 0.7, linetype = "solid"),
+            legend.position = "bottom",
+            panel.spacing.x = unit(0.1, "cm"),
+            panel.spacing.y = unit(0.1, "cm"),
+            panel.grid = element_line(color = "grey", linetype = "dashed", linewidth = unit(0.1, "cm"))
+        ) +
+        labs(x = "Gene Marker", y = " ")
+    return(p1)
+}
+
+raw_plot <- function(srt,resolution="RNA_snn_res.0.8",filePrefix){
+    p1 <- DimPlot(srt, group.by = resolution, raster = TRUE,label = TRUE, repel = TRUE) + ggtitle(paste0('nCells: ',dim(srt)[2]))
+    p2 <- DimPlot(srt, group.by = "singleR", raster = TRUE,label = TRUE, repel = TRUE)
+    p3 <- DimPlot(srt, group.by = "sample", raster = FALSE,label = TRUE, repel = TRUE)
+    p4 <- DimPlot(srt, group.by = "group", raster = FALSE,label = TRUE, repel = TRUE)
+    ggsave(filename = paste0(filePrefix,"_singleR.png"),height = 4,width = 20,plot = p1+p2+p3+p4+patchwork::plot_layout(widths = c(1,1,1.5,1))+patchwork::plot_annotation(tag_levels = "A"))
+    # 气泡图
+    p5 <- plotBigDotPlot(srt, group.by = "singleR", marker = marks())
+    p6 <- plotBigDotPlot(srt, group.by = resolution, marker = marks())
+    ggsave(
+    filename = paste0(filePrefix, "_singleR注释结果.png"), height = 14, width = 45, limitsize = F,
+    plot = cowplot::plot_grid(plotlist = list(p5,p6), align = "hv", ncol = 2, nrow = 2, rel_widths = c(1, 1)), bg = "white")
+}
+
+raw_plot(srt = scRNA,filePrefix = filePrefix)
+
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+#  细胞命名 进一步进行分群
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+scRNA@meta.data <- scRNA@meta.data %>%
+  mutate(
+    celltype = case_when(
+      grepl('CD8\\+ T-cells|T cells|NK_cell|NK & T cells', singleR) ~ 'NK & T cells',
+      grepl('Monocytes|Basophils|Macrophages|Neutrophils|Myeloid cells', singleR) ~ 'Myeloid cells',
+      grepl('Mesangial cells|Epithelial_cells|Epithelial cells', singleR) ~ 'Epithelial cells',
+      grepl('B-cells|B & Plasma cells', singleR) ~ 'B & Plasma cells',
+      grepl('Erythroid cells|Erythrocytes', singleR) ~ 'Erythroid cells',
+      grepl('Adipocytes|Endothelial_cells', singleR) ~ 'Endothelial cells',
+      TRUE ~ singleR
+    )
+  )
+
+scRNA$celltype <- ifelse(scRNA$RNA_snn_res.0.8 == 23,'oocytes',ifelse(scRNA$RNA_snn_res.0.8 == 26,'Granulosal',scRNA$celltype))
+
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+#  每一个分群进行harmony去批次分群
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+
+#### 对大群中注释的亚群数据进行进一步分析 ####
+suppressPackageStartupMessages({
+    library(Seurat)
+    library(dplyr)
+    library(harmony)
+    library(ggplot2)
+    library(ggpubr)
+    library(cowplot)
+    library(SingleR)
+    library(patchwork)
+    library(qs)
+})
+
+# 读入数据
+# Test_data <- "/root/wangje/Project/OveryArtical/001_大群Harmony.qs"
+celltype_column <- "celltype"
+message(paste0('[',Sys.time(),']',"读入数据....."))
+# scRNA <- qs::qread(Test_data)
+if(!(celltype_column %in% colnames(scRNA@meta.data))){
+    print("细胞注释的列不在读入的Seurat对象中")
+}
+message(sprintf("存在细胞类型%s",paste0(unique(scRNA@meta.data[[celltype_column]]),collapse = "\t")))
+celltypes <- unique(scRNA@meta.data[[celltype_column]])
+scRNA$celltype <- scRNA@meta.data[[celltype_column]]
+
+#### Cluster ####
+analyze_subcluster <- function(srt, celltypes, vars.to.regress=c('Phase', 'nCount_RNA', 'percent.mt'),output_dir = ".") {
+    if(length(celltypes) >1){
+        stop('celltype的长度为1')
+    }
+    message(paste0('[', Sys.time(), ']', "分亚群进行分析....."))
+    message(sprintf("分亚群进行分析.....%s", celltypes))
+    
+    scRNA_sub <- subset(srt, subset = celltype == celltypes)
+    # message(sprintf("%s的数据维度为%s,%s", celltypes, paste0(c('基因', '细胞'),dim(scRNA_sub), collapse = ',')))
+    print(dim(scRNA_sub))
+    message(paste0('[', Sys.time(), ']', '进行harmomny数据分析'))
+    
+    scRNA_sub <- Seurat::CreateSeuratObject(counts = scRNA_sub[['RNA']]@counts, meta.data = scRNA_sub@meta.data)
+    scRNA_harmony <- NormalizeData(scRNA_sub)
+    scRNA_harmony <- FindVariableFeatures(scRNA_sub)
+    scRNA_harmony <- ScaleData(scRNA_harmony, vars.to.regress = vars.to.regress)
+    scRNA_harmony <- RunPCA(scRNA_harmony, verbose = FALSE)
+    
+    system.time({
+        scRNA_harmony <- RunHarmony(scRNA_harmony, group.by.vars = c("sample","group"))
+    })
+    plot1 <- DimPlot(scRNA_harmony, reduction = "pca", group.by = "sample", raster = TRUE)
+    plot2 <- ElbowPlot(scRNA_harmony, ndims = 50, reduction = "pca")
+    plotc <- plot1 + plot2
+    
+    ggsave(filename = file.path(output_dir, paste0(celltypes, "ElbowPlot.png")), height = 4, width = 9, plot = plotc, bg = "white")
+    
+    pc.num <- 1:30
+    scRNA_harmony <- RunUMAP(scRNA_harmony, reduction = "harmony", dims = pc.num)
+    #scRNA_harmony <- RunTSNE(scRNA_harmony, reduction = "harmony", dims = pc.num)
+    scRNA_harmony <- FindNeighbors(scRNA_harmony, reduction = "harmony", dims = pc.num)
+    scRNA_harmony <- FindClusters(scRNA_harmony, reduction = "harmony", resolution = 0.8)
+    
+    DimPlot(scRNA_harmony, reduction = "umap", label = TRUE, raster = FALSE)
+    #DimPlot(scRNA_harmony, reduction = "tsne", label = TRUE)
+    qsave(scRNA_harmony, file.path(output_dir, paste0(celltypes, "_Harmony.qs")))
+    return(scRNA_harmony)
+}   
+
+#### singleR ####
+Run_singleR <- function(data, cluster, resolution) {
+    require("SingleR")
+    require("dplyr")
+    stopifnot(file.exists("/root/wangje/singleR.RData"))
+    load("/root/wangje/singleR.RData")
+    ref_list <- list(encode, hema, hpca, immune, monaImmune)
+    labels_list <- list(
+        encode$label.main,
+        hema$label.main,
+        hpca$label.main,
+        immune$label.main,
+        monaImmune$label.main
+    )
+    sce.data <- GetAssayData(data, solt = "data")
+    sce.singleR <- SingleR::SingleR(
+        test = sce.data,
+        ref = ref_list,
+        labels = labels_list,
+        clusters = cluster,
+        BPPARAM = BiocParallel::MulticoreParam(6)
+    )
+    # 提取 celltype 数据
+    celltype <- data.frame(
+        ClusterID = rownames(sce.singleR),
+        singleR = sce.singleR$labels,
+        stringsAsFactors = FALSE
+    )
+    # 将注释信息添加到seurat对象中
+    if (is.null(resolution)) stop("missing resolution files.")
+    tmp <- data@meta.data %>% dplyr::select(resolution)
+    colnames(tmp) <- "ClusterID"
+    tmp1 <- left_join(tmp, celltype, by = "ClusterID")
+    rownames(tmp1) <- rownames(tmp)
+    sce_new <- AddMetaData(data, tmp1)
+    return(sce_new)
+}
+
+#### plot ####
+marks <- function(){
+    mark_list <- list(
+    Immune = c("PTPRC"),
+    NK = c("KLRC1", "FCGR3A", "NCAM1", "KLRD1", "GNLY"),
+    "T cells" = c("CD3D", "CD3G", "CD2", "CD8A", "CD8B", "CD4"),
+    Fibroblasts = c("COL1A1", "DCN", "LUM", "PDGFRA"),
+    Myeloids = c("LYZ", "CD68", "TYROBP"),
+    Epithelial = c("CD24", "KRT19", "EPCAM", "KRT18"),
+    Bcells = c("CD79A", "CD19", "MS4A1"),
+    Endothelial = c("CLDN5", "FLT1", "RAMP2", "CDH5"),
+    "Smooth muscle" = c("GJA4", "PLAC9", "CRYAB", "ACTA2", "PLN", "ADIRF", "MYH11", "CNN1", "MYL9"),
+    Neutrophil = c("FCGR3B", "S100P", "CMTM2"),
+    oocytes = c("TUBB8", "ZP3", "FIGLA"),
+    Granulosal = c("GSTA1", "AMH", "HSD17B1", "DSP"),
+    DC = c("LILRA4", "CXCR3", "IRF7"),
+    Mast = c("CPA3", "TPSAB1", "TPSB2"))
+    return(mark_list)
+}
+# 气泡图
+plotBigDotPlot <- function(inputfile, group.by, marker) {
+    p1 <- DotPlot(inputfile, assay = "RNA", features = marker, scale = TRUE, group.by = group.by) +
+        scale_color_gradient2(low = "blue", mid = "white", high = "red") +
+        # 添加四条黑色边界线
+        annotate(geom = "segment", x = -Inf, xend = Inf, y = Inf, yend = Inf, color = "black", size = 1) +
+        annotate(geom = "segment", x = -Inf, xend = Inf, y = -Inf, yend = -Inf, color = "black", size = 1) +
+        theme_minimal() +
+        theme(
+            axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 14),
+            strip.text.x = element_text(size = 14, angle = 0),
+            axis.text.y = element_text(size = 15),
+            panel.border = element_rect(fill = NA, color = "black", linewidth = 0.7, linetype = "solid"),
+            legend.position = "bottom",
+            panel.spacing.x = unit(0.1, "cm"),
+            panel.spacing.y = unit(0.1, "cm"),
+            panel.grid = element_line(color = "grey", linetype = "dashed", linewidth = unit(0.1, "cm"))
+        ) +
+        labs(x = "Gene Marker", y = " ")
+    return(p1)
+}
+
+raw_plot <- function(srt,resolution="RNA_snn_res.0.8",filePrefix){
+    p1 <- DimPlot(srt, group.by = resolution, raster = TRUE,label = TRUE, repel = TRUE) + ggtitle(paste0('nCells: ',dim(srt)[2]))
+    p2 <- DimPlot(srt, group.by = "singleR", raster = TRUE,label = TRUE, repel = TRUE)
+    p3 <- DimPlot(srt, group.by = "sample", raster = FALSE,label = TRUE, repel = TRUE)
+    p4 <- DimPlot(srt, group.by = "group", raster = FALSE,label = TRUE, repel = TRUE)
+    ggsave(filename = paste0(filePrefix,"_singleR.png"),height = 4,width = 20,plot = p1+p2+p3+p4+patchwork::plot_layout(widths = c(1,1,1.5,1))+patchwork::plot_annotation(tag_levels = "A"))
+    # 气泡图
+    p5 <- plotBigDotPlot(srt, group.by = "singleR", marker = marks())
+    p6 <- plotBigDotPlot(srt, group.by = resolution, marker = marks())
+    ggsave(
+    filename = paste0(filePrefix, "_singleR注释结果.png"), height = 14, width = 30, limitsize = F,
+    plot = cowplot::plot_grid(plotlist = list(p5,p6), align = "hv", ncol = 2, nrow = 2, rel_widths = c(1, 1)), bg = "white")
+}
+
+
+message(paste0("进行数据分群和SingleR粗注释......"))
+result = NULL
+output_dir = "."
+for(cell in unique(celltypes)){
+    print(paste0('[',Sys.time(),']',cell,' 使用harmony进行分群.....'))
+    result <- analyze_subcluster(
+        scRNA,celltypes = cell
+    )
+    # 分群结束，使用是singleR进行粗注释
+    result = Run_singleR(data = result, cluster = result$RNA_snn_res.0.8, resolution = "RNA_snn_res.0.8")
+    raw_plot(srt = result,filePrefix = cell)
+    qsave(result, file.path(output_dir, paste0(cell, "_Harmony.qs")))
+}
+
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+#  筛选出celltype中其他类型的细胞
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+suppressPackageStartupMessages({
+    library(Seurat)
+    library(dplyr)
+    library(Matrix)
+    library(ggplot2)
+    library(Seurat)
+    library(qs)
+})
+setwd('/root/wangje/Project/OveryArtical/New')
+##### B cells ######
+scRNA <- qread("B & Plasma cells_Harmony.qs") #33047 features across 1562 samples within 1 assay 
+# B细胞中混有少量T细胞，DC细胞和成纤维细胞，其中成纤维细胞可能是双细胞，不建议后续使用
+qsave(subset(scRNA,subset=RNA_snn_res.0.8==5),file = "B细胞中筛选DC细胞")
+qsave(subset(scRNA,subset=RNA_snn_res.0.8==12),file = "B细胞中筛选T细胞")
+qsave(subset(scRNA,subset=RNA_snn_res.0.8==7),file = "B细胞中筛选SMC细胞")
+qsave(subset(scRNA,subset=RNA_snn_res.0.8==14),file = "B细胞中筛选Fibrobalsts细胞")
+qsave(scRNA[,!scRNA$RNA_snn_res.0.8 %in% c(5,7,12,14)],file = "B细胞中筛选B细胞")
+
+##### Myeloids ######
+scRNA <- qread('Myeloid cells_Harmony.qs') # 33047 features across 13121 samples within 1 assay 
+scRNA <- scRNA[,!scRNA$RNA_snn_res.0.8 %in% c(6,20,23,24)]
+qsave(scRNA,file = "Myeloid cells_Harmony_sub.qs")
+
+##### T cells ######
+# 其中有部分SMC细胞可以去除
+scRNA <- qread('NK & T cells_Harmony.qs') #33047 features across 20220 samples within 1 assay 
+qsave(scRNA[,scRNA$RNA_snn_res.0.8==13],file = "NK & T cells_Harmony筛选SMC.qs") 
+qsave(scRNA[,!scRNA$RNA_snn_res.0.8==13],file = "NK & T cells_Harmony筛选T细胞.qs") 
+
+#### Fibroblasts ######
+scRNA <- qread('/root/wangje/Project/OveryArtical/New/Fibroblasts_Harmony.qs') # 33047 features across 157935 samples within 1 assay
+qsave(scRNA[,scRNA$RNA_snn_res.0.8 != 30],file = '/root/wangje/Project/OveryArtical/New/Fibroblasts_Harmony_sub.qs')
+
+#### Endothelials #####
+scRNA <- qread('/root/wangje/Project/OveryArtical/New/Endothelial cells_Harmony.qs') #33047 features across 25442 samples within 1 assay 
+qsave(scRNA[,!scRNA$RNA_snn_res.0.8 %in% c(0,10,18)],file = '/root/wangje/Project/OveryArtical/New/Endothelial cells_Harmony_sub.qs')
+
+#### Epithelials #####
+scRNA <- qread('/root/wangje/Project/OveryArtical/New/Epithelial cells_Harmony.qs') # 33047 features across 9466samples within 1 assay
+qsave(scRNA[,!scRNA$RNA_snn_res.0.8 %in% c(21,11,5,13)],file = '/root/wangje/Project/OveryArtical/New/Epithelial cells_Harmony_sub.qs')
+
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+#  筛选后的细胞再次进行聚类分群
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+library(Seurat)
+library(dplyr)
+library(qs)
+library(SCP)
+
+
+path <- '/root/wangje/Project/OveryArtical/New/'
+getData <- function(filepath){
+  tmp  <- qread(filepath)
+  tmp <- Seurat::CreateSeuratObject(tmp@assays$RNA@counts,meta.data = tmp@meta.data)
+  tmp
+}
+
+message("读入数据")
+files <- list(
+  # Myeloids = getData(paste0(path,'Myeloid cells_Harmony_sub.qs')),
+  Tcells = getData(paste0(path,'NK & T cells_Harmony筛选T细胞.qs')),
+  Endothelial = getData('/root/wangje/Project/OveryArtical/New/Endothelial cells_Harmony_sub.qs'),
+  Epithelial = getData('/root/wangje/Project/OveryArtical/New/Epithelial cells_Harmony_sub.qs')
+  # Fibroblasts = getData(paste0(path,'Fibroblasts_Harmony_sub.qs'))
+)
+
+files <- lapply(files,FUN = function(x){ 
+  # 去除细胞数小于20的样本
+  tmp  <- x
+  tmp <- tmp[,tmp$sample %in% names(table(tmp$sample))[table(tmp$sample) >=20]]})
+
+message("聚类分析") 
+for(cell in names(files)){
+  message(paste0(Sys.time(),'开始分析',cell)) 
+  # scRNA <- SCP::Integration_SCP(files[[cell]], batch = "sample", integration_method = "Harmony", cluster_resolution = seq(0.1, 1.5, 0.1))
+  # qsave(scRNA, file = paste0(cell,"_scp.qs"))
+  # BBKNN聚类
+  scRNA <- SCP::Integration_SCP(files[[cell]], batch = "sample", integration_method = "BBKNN", cluster_resolution = seq(0.1, 1.5, 0.1))
+  qsave(scRNA, file = paste0(cell,"_scp.qs"))
+  # scVI聚类
+  scRNA <- SCP::Integration_SCP(files[[cell]], batch = "sample", integration_method = "scVI", cluster_resolution = seq(0.1, 1.5, 0.1))
+  qsave(scRNA, file = paste0(cell,"_scp.qs"))
+}
+
+
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+#  进行绘图
+#$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$

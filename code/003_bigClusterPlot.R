@@ -95,6 +95,19 @@ p4 <- p4 + theme(strip.text = element_text(size = 20, color = "black", face = "b
 ggsave(filename = "./001_AllClutserCelltypeSplitDimPlot06.png", height = 4, width = 26, plot = p4, bg = "white",limitsize = FALSE)
 ggsave(filename = "./001_AllClutserCelltypeSplitDimPlot06.pdf", height = 4, width = 26, plot = p4, bg = "white", family = "ArialMT",limitsize = FALSE)
 
+# split dimplot
+p4 <- DimPlot(scRNA,group.by = "celltype", label = F, repel = T, raster = F,split.by = 'group2',ncol = 7,
+  cols= c(RColorBrewer::brewer.pal(n = 7, name = "Dark2"), RColorBrewer::brewer.pal(n = 7, name = "Accent"))
+) +
+  guides(color = guide_legend(override.aes = list(size = 6))) +
+  theme(plot.title = element_blank()) + labs(title = "") +
+  theme_blank(xlab = "UMAP1", ylab = "UMAP2")
+p4 <- p4 + theme(strip.text = element_text(size = 20, color = "black", face = "bold"),strip.background = element_rect(fill = '#fffbe9'))
+
+ggsave(filename = "./001_AllClutserCelltypeSplitDimPlot07.png", height = 4, width = 26, plot = p4, bg = "white",limitsize = FALSE)
+ggsave(filename = "./001_AllClutserCelltypeSplitDimPlot07.pdf", height = 4, width = 26, plot = p4, bg = "white", family = "ArialMT",limitsize = FALSE)
+
+
 # 2 绘制marker基因表达 ************************************************************************************************************************
 mark_list <- list(
   NK = c("KLRD1"),
@@ -175,12 +188,17 @@ df <- df1 %>%
   data.table::setDT()
 # 计算比例
 df[, Prop := n1 / n]
-write.table(df,file = "001_AllClutser大群细胞比例.txt",sep = '\t',row.names = F,quote = F)
+write.table(df,file = "001_AllClutser大群细胞比例.02txt",sep = '\t',row.names = F,quote = F)
 # 比较组合
 compair <- list(c('18-29','37-39'),c('18-29','39-44'),c('18-29','32-35'),c('18-29','47-49'),c('18-29','55-60'),c('37-39','39-44'),
   c('37-39','32-35'),c('37-39','47-49'),c('37-39','55-60'),c('39-44','32-35'),c('39-44','47-49'),c('39-44','55-60'),c('32-35','47-49'),
   c('32-35','55-60'),c('47-49','55-60'))  
 # df$group <- factor(df$group, levels = c("20_35", "38_44", "50_60"))
+
+compair <- list(c('18-35','37-39'),c('18-35','39-44') ,c('18-35','47-49'),c('18-35','55-60'),c('39-44','37-39'),c('37-39','47-49'),c('37-39','55-60'),
+    c('39-44','47-49'),c('39-44','55-60'),c('47-49','55-60')
+) 
+
 df$celltype <- varhandle::unfactor(df$celltype)
 
 lapply(unique(df$celltype), FUN = function(x) {
@@ -241,8 +259,8 @@ lapply(unique(df$celltype), FUN = function(x) {
 }) -> plist
 
 p5 <- ggpubr::ggarrange(plotlist = plist, ncol = 5, nrow = 2, common.legend = TRUE, align = "v", legend = "bottom")
-ggsave(filename = "./001_AllClutser比例箱线图.png", height = 8, width = 15,plot = p5,bg = "white")
-ggsave(filename = "./001_AllClutser比例箱线图.pdf", height = 8, width = 15,plot = p5,bg="white")
+ggsave(filename = "./001_AllClutser比例箱线图02.png", height = 8, width = 15,plot = p5,bg = "white")
+ggsave(filename = "./001_AllClutser比例箱线图02.pdf", height = 8, width = 15,plot = p5,bg="white")
 
 # 5 绘制细胞比例柱形图*************************************************************************************************************************
 prop <- as.data.frame(prop.table(table(scRNA$celltype, scRNA$group1), margin = 2))
@@ -261,13 +279,98 @@ p1 <- ggplot(prop, aes(x = Var2, y = Freq, fill = Var1, stratum = Var1, alluvium
     legend.text = element_text(size = 18, color = "black"),
     axis.title.y = element_text(size = 22, colour = "black"),
     axis.text.y = element_text(size = 22, colour = "black"),
-    legend.position = 'top',
+    legend.position = 'right',
     # axis.text.x = element_text(size = 20, colour = "black", angle = 90, hjust = 1, vjust = 0.5),
-    # axis.text.x = element_text(size = 20, colour = "black", angle = 45, hjust = 1, vjust = 1),
+    axis.text.x = element_text(size = 20, colour = "black", angle = 45, hjust = 1, vjust = 1),
     axis.ticks.y = element_line(linewidth = 1.3),
     axis.ticks.length.y = unit(0.4, "cm"),
-    axis.text.x = element_blank(),
+    # axis.text.x = element_blank(),
     axis.title.x = element_blank(),
     axis.ticks.x = element_blank(),
   ) +
   scale_fill_manual(values = c(RColorBrewer::brewer.pal(n = 7, name = "Dark2"), RColorBrewer::brewer.pal(n = 7, name = "Accent")))
+
+ggsave(filename = "./001_AllClutser比例柱形图02.png", height = 8, width = 10,plot = p1,bg = "white")
+
+
+scRNA$group1 <-paste0(scRNA$sample,'--',scRNA$group1)
+prop <- as.data.frame(prop.table(table(scRNA$celltype, scRNA$group1), margin = 2)) %>% 
+  dplyr::mutate(
+    sample = stringr::str_split_fixed(Var2,'--',n=2)[,1],
+    group = stringr::str_split_fixed(Var2,'--',n=2)[,2],
+  )
+head(prop)
+
+p1 <- ggplot(prop, aes(x = sample, y = Freq, fill = Var1, stratum = Var1, alluvium = Var1)) +
+  geom_flow(stat = "alluvium", lode.guidance = "frontback", curve_type = "linear", alpha = 0.5, width = 0.7, color = "white") +
+  geom_stratum(alpha = 1, color = "black", width = 0.7) +
+  facet_grid(cols = vars(group), scales = "free", space = "free_x", switch = "y")+
+  # geom_text(aes(label = Prop),position = position_stack(vjust = .5),size =3.5, color = 'black') +
+  theme_classic(base_size = 20, base_line_size = 1) +
+  guides(fill = guide_legend(override.aes = list(size = 6))) +
+  # scale_x_discrete(expand = c(0.04,0))+
+  labs(x = "", y = "% Fraction") +
+  theme(
+    legend.title = element_blank(),
+    plot.title = element_text(hjust = 1, vjust = 0.5, size = 22, color = "black"),
+    # panel.border = element_rect(fill = NA, color = "black", size = 1.3, linetype = "solid"),
+    legend.text = element_text(size = 15, color = "black"),
+    axis.title.y = element_text(size = 20, colour = "black"),
+    axis.text.y = element_text(size = 18, colour = "black"),
+    strip.text = element_text(size=26,color="black"),
+    legend.position = 'right',
+    # axis.text.x = element_text(size = 20, colour = "black", angle = 90, hjust = 1, vjust = 0.5),
+    axis.text.x = element_text(size = 20, colour = "black", angle = 45, hjust = 1, vjust = 1),
+    axis.ticks.y = element_line(linewidth = 1.3),
+    axis.ticks.x = element_line(linewidth = 1.3),
+    axis.ticks.length.y = unit(0.4, "cm"),
+    # axis.text.x = element_blank(),
+    axis.title.x = element_blank(),
+    # axis.ticks.x = element_blank(),
+  ) +
+  scale_fill_manual(values = c(RColorBrewer::brewer.pal(n = 7, name = "Dark2"), RColorBrewer::brewer.pal(n = 7, name = "Accent")))
+
+# 样本
+ggsave(filename = "./001_AllClutser比例柱形图样本02.png", height = 8, width = 20,plot = p1,bg = "white")
+
+
+scRNA$group1 <-paste0(scRNA$sample,'--',scRNA$group2)
+prop <- as.data.frame(prop.table(table(scRNA$celltype, scRNA$group1), margin = 2)) %>% 
+  dplyr::mutate(
+    sample = stringr::str_split_fixed(Var2,'--',n=2)[,1],
+    group = stringr::str_split_fixed(Var2,'--',n=2)[,2],
+  )
+head(prop)
+
+p1 <- ggplot(prop, aes(x = sample, y = Freq, fill = Var1, stratum = Var1, alluvium = Var1)) +
+  geom_flow(stat = "alluvium", lode.guidance = "frontback", curve_type = "linear", alpha = 0.5, width = 0.7, color = "white") +
+  geom_stratum(alpha = 1, color = "black", width = 0.7) +
+  facet_grid(cols = vars(group), scales = "free", space = "free_x", switch = "y")+
+  # geom_text(aes(label = Prop),position = position_stack(vjust = .5),size =3.5, color = 'black') +
+  theme_classic(base_size = 20, base_line_size = 1) +
+  guides(fill = guide_legend(override.aes = list(size = 6))) +
+  # scale_x_discrete(expand = c(0.04,0))+
+  labs(x = "", y = "% Fraction") +
+  theme(
+    legend.title = element_blank(),
+    plot.title = element_text(hjust = 1, vjust = 0.5, size = 22, color = "black"),
+    # panel.border = element_rect(fill = NA, color = "black", size = 1.3, linetype = "solid"),
+    legend.text = element_text(size = 15, color = "black"),
+    axis.title.y = element_text(size = 20, colour = "black"),
+    axis.text.y = element_text(size = 18, colour = "black"),
+    strip.text = element_text(size=26,color="black"),
+    legend.position = 'right',
+    # axis.text.x = element_text(size = 20, colour = "black", angle = 90, hjust = 1, vjust = 0.5),
+    axis.text.x = element_text(size = 20, colour = "black", angle = 45, hjust = 1, vjust = 1),
+    axis.ticks.y = element_line(linewidth = 1.3),
+    axis.ticks.x = element_line(linewidth = 1.3),
+    axis.ticks.length.y = unit(0.4, "cm"),
+    # axis.text.x = element_blank(),
+    axis.title.x = element_blank(),
+    # axis.ticks.x = element_blank(),
+  ) +
+  scale_fill_manual(values = c(RColorBrewer::brewer.pal(n = 7, name = "Dark2"), RColorBrewer::brewer.pal(n = 7, name = "Accent")))
+
+# 样本
+ggsave(filename = "./001_AllClutser比例柱形图样本.png", height = 8, width = 20,plot = p1,bg = "white")  
+

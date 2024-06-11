@@ -33,6 +33,16 @@ qsave(scRNA, file = './07_T细胞数据_scp.qs')
 source("SingleRAnno.R")
 scRNA <- Run_singleR(
     scRNA,
-    cluster = scRNA$Harmony_SNN_res.1,
-    resolution = "Harmony_SNN_res.1"
+    cluster = scRNA$BBKNN_res.1.5,
+    resolution = "BBKNN_res.1.5"
 )
+
+# 3 使用NK 和T细胞的marker进行注释**************************************************************************************************
+markers <- function(){
+    marks <- list(
+        TCells = c('CD3G','CD3D','CD2','CD4','CD8A','CD8B'),
+        NK = c('FGFBP2','FCG3RA','CX3CR1','CD56','CXCR3','IFNG','KLRC1','IL7R','KIT','KLRD1','GZMB'))}
+
+
+Idents(scRNA) <- scRNA$BBKNN_res.1.5
+p1 <- plotBigDotPlot(scRNA,group.by = 'BBKNN_res.1.5',marker = markers())
